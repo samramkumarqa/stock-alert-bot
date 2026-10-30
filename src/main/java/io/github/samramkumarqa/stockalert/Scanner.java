@@ -53,7 +53,8 @@ public final class Scanner {
     }
 
     public Result scan(List<String> symbols, LocalDate date, LocalTime baselineTime, LocalTime checkTime)
-            throws InterruptedException {
+            throws InterruptedException, java.io.IOException {
+        source.prefetch(symbols, date);
         Instant baseline = date.atTime(baselineTime).atZone(zone).toInstant();
         Instant check = date.atTime(checkTime).atZone(zone).toInstant();
 

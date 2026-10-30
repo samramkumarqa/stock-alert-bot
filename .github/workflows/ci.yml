@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  java:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -24,3 +24,17 @@ jobs:
           name: surefire-reports
           path: target/surefire-reports/
           if-no-files-found: ignore
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+      - name: Test price fetcher (offline)
+        run: |
+          pip install -q -r scripts/requirements.txt pytest
+          cd scripts && python -m pytest -q

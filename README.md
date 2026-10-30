@@ -27,7 +27,7 @@ Checked 498 of 500 stocks.
 GitHub Actions (09:05 IST, Mon–Fri)
   └─ App waits until 09:46 IST
       ├─ Universe        Nifty 500 list from NSE (cached copy as fallback)
-      ├─ YahooFinance    1-minute bars for SYMBOL.NS (8 requests in parallel, retry on 429/5xx)
+      ├─ YfinanceSource  runs scripts/fetch_bars.py once: 1-minute bars for all SYMBOL.NS (yfinance)
       ├─ PriceSeries     price at 09:30 = close of the 09:29 bar; same for 09:45
       ├─ MomentumRule    (P945 − P930) / P930 × 100  >  1.5, then top 5 by gain
       ├─ Notifiers       Telegram · Email (+ CSV) · console
@@ -36,7 +36,8 @@ GitHub Actions (09:05 IST, Mon–Fri)
 
 Design choices:
 
-- **Yahoo Finance chart API.** It's free, needs no login or token, and Yahoo lists NSE data as real-time. Because it returns the whole morning's 1-minute bars, a single fetch after 9:45 gives both prices.
+- **Yahoo Finance data.** It's free, needs no login or token, and Yahoo lists NSE data as real-time. Because it returns the whole morning's 1-minute bars, a single fetch after 9:45 gives both prices.
+- **One small Python step.** Yahoo blocks plain HTTP clients from cloud servers: from a GitHub runner, Java's HTTP client and even `curl` get HTTP 429 on every request. The [yfinance](https://github.com/ranaroussi/yfinance) library looks like a real browser and is accepted, so `scripts/fetch_bars.py` does the download and everything else stays in Java. The pure-Java client is still there (`PRICE_SOURCE=yahoo-http`) for networks where Yahoo allows it.
 - **Exact prices even if the job starts late.** GitHub often starts scheduled jobs late. That doesn't matter here: the 9:30 and 9:45 prices are read from the bars, not "now", so a late start still yields the exact prices and only delays the alert.
 - **Telegram for alerts.** It's free and gives an instant push notification, with no SMS registration or per-message fees.
 - **Secrets only in env vars and GitHub Secrets**, never in code.
@@ -66,7 +67,10 @@ After that, it runs by itself every weekday.
 
 ## Run locally
 
+Needs Java 21 and Python 3.10+.
+
 ```bash
+pip install -r scripts/requirements.txt      # yfinance (the price fetcher)
 mvn verify                                   # tests + build
 cp .env.example .env && $EDITOR .env         # add your tokens
 set -a; source .env; set +a
@@ -76,6 +80,7 @@ java -jar target/stock-alert-bot.jar backtest 2026-10-29 --notify   # also Teleg
 java -jar target/stock-alert-bot.jar                                # live: waits for 09:46 IST
 ```
 
+Run these from the repo root, so the bot finds `scripts/fetch_bars.py`.
 Flags: `--dry-run` (live mode, console only), `--force` (run on a weekend or holiday).
 Yahoo keeps 1-minute bars for roughly the last 30 days, so backtests work within that window.
 
@@ -94,7 +99,9 @@ docker run --rm --env-file .env -v "$PWD/reports:/app/reports" stock-alert-bot b
 | `MAX_ALERTS` | `5` | Alert only the top N gainers among qualifying stocks (`0` = all) |
 | `BASELINE_TIME` / `CHECK_TIME` | `09:30` / `09:45` | The window (IST) |
 | `FETCH_DELAY_SECONDS` | `60` | Wait after `CHECK_TIME` so the last bar has closed |
-| `FETCH_CONCURRENCY` | `8` | Parallel Yahoo requests |
+| `PRICE_SOURCE` | `yfinance` | `yfinance` (Python fetcher), or `yahoo-http` (pure Java; blocked from cloud servers) |
+| `PYTHON` / `FETCH_SCRIPT` | `python3` / `scripts/fetch_bars.py` | How the bot runs the fetcher |
+| `FETCH_CONCURRENCY` | `8` | Parallel requests (`yahoo-http` only) |
 | `SEND_WHEN_NO_SIGNALS` | `true` | Send a "no alerts today" message, so you know it ran |
 | `UNIVERSE_URLS` | NSE Nifty 500 CSV | Comma-separated; use a Nifty 50 / 200 CSV URL for a smaller list |
 | `UNIVERSE_FILE` | `data/nifty500.csv` | Cache, or your own list |
@@ -105,22 +112,24 @@ docker run --rm --env-file .env -v "$PWD/reports:/app/reports" stock-alert-bot b
 ```
 rule/MomentumRuleTest          threshold boundaries (1.49 / 1.50 / 1.51 %), sorting, top-N, bad prices
 market/PriceSeriesTest         which bar is "the price at 09:30", stale/illiquid stocks
-market/YahooFinanceSourceTest  real response fixture, URL encoding (M&M), 429 retry, 5xx give-up, 404
+market/YfinanceSourceTest      Java ↔ Python bridge with a fake fetcher: CSV hand-off, failures, missing script
+market/YahooFinanceSourceTest  pure-Java client: response fixture, URL encoding (M&M), 429 retry, 5xx give-up, 404
 market/UniverseTest            NSE CSV parsing, download → cache → fallback
 market/MarketCalendarTest      weekends, NSE holidays, custom file
 ScannerTest                    end-to-end scan with a fake source, partial failures, concurrency cap
 notify/TelegramNotifierTest    request shape, token never leaks in errors, 4096-char splitting
 notify/AlertFormatterTest      message text, top-5 cut with "+N more", failure warning
 report/CsvReportTest           report contents
+scripts/test_fetch_bars.py     (pytest) flattening yfinance's DataFrame into bars, gaps, missing tickers
 ```
 
-HTTP tests use an in-process JDK `HttpServer` stub, so the suite never calls Yahoo or Telegram.
+No test calls Yahoo or Telegram: HTTP tests use an in-process JDK `HttpServer` stub, and the fetcher tests use synthetic DataFrames.
 
 ## Maintenance
 
 - **Every December:** add next year's NSE holidays to `nse-holidays.txt`. The bot logs a warning if the year is missing.
 - **Keep the schedule alive:** GitHub pauses scheduled workflows in repos with no commits for 60 days. Re-enable it from the Actions tab, or push any commit.
-- **Data source:** Yahoo's endpoint is unofficial. If it changes, only `YahooFinanceSource`/`YahooChartParser` need updating, because the rest depends on the `PriceSource` interface.
+- **Data source:** Yahoo's endpoint is unofficial. If downloads start failing, first try `pip install -U yfinance`, since that project tracks Yahoo's changes. Swapping to another provider means one new `PriceSource` class; nothing else changes.
 
 ---
 This project is a rework of [TradingBOT2](https://github.com/samramkumarqa/TradingBOT2).

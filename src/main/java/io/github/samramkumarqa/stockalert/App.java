@@ -15,6 +15,8 @@ import org.slf4j.LoggerFactory;
 
 import io.github.samramkumarqa.stockalert.config.AppConfig;
 import io.github.samramkumarqa.stockalert.market.MarketCalendar;
+import io.github.samramkumarqa.stockalert.market.PriceSource;
+import io.github.samramkumarqa.stockalert.market.YfinanceSource;
 import io.github.samramkumarqa.stockalert.market.Universe;
 import io.github.samramkumarqa.stockalert.market.YahooFinanceSource;
 import io.github.samramkumarqa.stockalert.notify.Alert;
@@ -85,8 +87,7 @@ public final class App {
                     .build();
             List<String> symbols = Universe.load(cfg.universeUrls(), cfg.universeCache(), http);
             MomentumRule rule = new MomentumRule(cfg.thresholdPct());
-            Scanner scanner = new Scanner(
-                    new YahooFinanceSource(http, cfg.yahooBaseUrl(), cfg.zone()), rule, cfg.zone(), cfg.fetchConcurrency());
+            Scanner scanner = new Scanner(priceSource(cfg, http), rule, cfg.zone(), cfg.fetchConcurrency());
 
             Scanner.Result result = scanner.scan(symbols, date, cfg.baselineTime(), cfg.checkTime());
             result.failures().stream().limit(20).forEach(f -> log.warn("Unpriced: {}", f));
@@ -111,6 +112,20 @@ public final class App {
             deliver(AlertFormatter.failure("Scan for " + date + " did not complete.", e), notifiers);
             return 1;
         }
+    }
+
+    /**
+     * {@code yfinance} (default): Python fetcher, works from GitHub runners.
+     * {@code yahoo-http}: pure-Java client; Yahoo answers 429 to it from cloud IPs, may work from home.
+     */
+    static PriceSource priceSource(AppConfig cfg, HttpClient http) {
+        return switch (cfg.priceSource()) {
+            case "yfinance" -> new YfinanceSource(cfg.python(), cfg.fetchScript(),
+                    cfg.universeCache().toAbsolutePath().getParent(), Duration.ofMinutes(15));
+            case "yahoo-http" -> new YahooFinanceSource(http, cfg.yahooBaseUrl(), cfg.zone());
+            default -> throw new IllegalArgumentException(
+                    "PRICE_SOURCE must be yfinance or yahoo-http, not '" + cfg.priceSource() + "'");
+        };
     }
 
     static List<Notifier> notifiers(AppConfig cfg, boolean external) {

@@ -37,6 +37,15 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install price fetcher (yfinance)
+        run: pip install -q -r scripts/requirements.txt
+
       - name: Restore cached Nifty 500 list
         uses: actions/cache@v4
         with:
