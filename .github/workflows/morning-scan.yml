@@ -55,6 +55,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
           THRESHOLD_PCT: ${{ vars.THRESHOLD_PCT || '1.5' }}
+          MAX_ALERTS: ${{ vars.MAX_ALERTS || '5' }}
           MODE: ${{ inputs.mode || 'live' }}
           BACKTEST_DATE: ${{ inputs.date }}
           BACKTEST_NOTIFY: ${{ inputs.notify }}

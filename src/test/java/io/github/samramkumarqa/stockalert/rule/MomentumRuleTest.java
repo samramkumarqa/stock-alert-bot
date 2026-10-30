@@ -45,6 +45,19 @@ class MomentumRuleTest {
     }
 
     @Test
+    void topKeepsTheBiggestGainersOnly() {
+        List<Observation> obs = List.of(
+                new Observation("A", 100, 110), new Observation("B", 100, 109), new Observation("C", 100, 108),
+                new Observation("D", 100, 107), new Observation("E", 100, 106), new Observation("F", 100, 105),
+                new Observation("G", 100, 104));
+
+        assertThat(MomentumRule.top(rule.signals(obs), 5)).extracting(Observation::symbol)
+                .containsExactly("A", "B", "C", "D", "E");
+        assertThat(MomentumRule.top(rule.signals(obs), 0)).hasSize(7);       // 0 = no limit
+        assertThat(MomentumRule.top(rule.signals(obs), 10)).hasSize(7);      // fewer than the limit
+    }
+
+    @Test
     void changePctIsRelativeToBaseline() {
         assertThat(new Observation("X", 250, 255).changePct()).isCloseTo(2.0, org.assertj.core.data.Offset.offset(1e-9));
     }

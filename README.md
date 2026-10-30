@@ -2,19 +2,22 @@
 
 [![CI](https://github.com/samramkumarqa/stock-alert-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/samramkumarqa/stock-alert-bot/actions/workflows/ci.yml)
 
-Every NSE trading morning, this bot finds the **Nifty 500 stocks that rose more than 1.5% between 9:30 and 9:45 IST** and sends a **BUY alert** to Telegram and email.
+Every NSE trading morning, this bot finds the Nifty 500 stocks that rose more than 1.5% between 9:30 and 9:45 IST. It sends a **BUY alert for the top 5 gainers** to Telegram and email.
 
 It only sends alerts and never places orders. Treat it as a screener, not as investment advice.
 
 ```
-📈 BUY ALERT · 3 stocks · Thu 29 Oct 2026
+📈 BUY ALERT · Top 5 of 23 stocks · Thu 29 Oct 2026
 
-Up more than 1.5% from 9:30 → 9:45 IST:
+Top 5 gainers, each up more than 1.5% from 9:30 → 9:45 IST:
 
 1. TATAMOTORS  +2.86%  ₹700.00 → ₹720.00
 2. M&M  +2.00%  ₹3,000.00 → ₹3,060.00
 3. SBIN  +1.63%  ₹800.00 → ₹813.00
+4. ...
+5. ...
 
++18 more above 1.5% (full list in the CSV report).
 Checked 498 of 500 stocks.
 ```
 
@@ -26,9 +29,9 @@ GitHub Actions (09:05 IST, Mon–Fri)
       ├─ Universe        Nifty 500 list from NSE (cached copy as fallback)
       ├─ YahooFinance    1-minute bars for SYMBOL.NS (8 requests in parallel, retry on 429/5xx)
       ├─ PriceSeries     price at 09:30 = close of the 09:29 bar; same for 09:45
-      ├─ MomentumRule    (P945 − P930) / P930 × 100  >  1.5
+      ├─ MomentumRule    (P945 − P930) / P930 × 100  >  1.5, then top 5 by gain
       ├─ Notifiers       Telegram · Email (+ CSV) · console
-      └─ CsvReport       reports/scan-YYYY-MM-DD.csv (uploaded as a workflow artifact)
+      └─ CsvReport       reports/scan-YYYY-MM-DD.csv: every stock, marked above_threshold / buy_alert
 ```
 
 Design choices:
@@ -56,7 +59,7 @@ Design choices:
    | `SMTP_PASSWORD` | Gmail app password |
    | `ALERT_EMAIL_TO` | `you@gmail.com` |
 
-   To change the threshold, add a repository **variable** `THRESHOLD_PCT` (default `1.5`).
+   To change the threshold or the number of stocks, add repository **variables** `THRESHOLD_PCT` (default `1.5`) and `MAX_ALERTS` (default `5`).
 4. **Test it:** go to Actions → *Morning scan* → *Run workflow* → mode `backtest`, a recent trading date, tick *notify*. You should get the alert for that day within a minute.
 
 After that, it runs by itself every weekday.
@@ -87,7 +90,8 @@ docker run --rm --env-file .env -v "$PWD/reports:/app/reports" stock-alert-bot b
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `THRESHOLD_PCT` | `1.5` | Alert when the gain is **more than** this |
+| `THRESHOLD_PCT` | `1.5` | A stock qualifies when its gain is **more than** this |
+| `MAX_ALERTS` | `5` | Alert only the top N gainers among qualifying stocks (`0` = all) |
 | `BASELINE_TIME` / `CHECK_TIME` | `09:30` / `09:45` | The window (IST) |
 | `FETCH_DELAY_SECONDS` | `60` | Wait after `CHECK_TIME` so the last bar has closed |
 | `FETCH_CONCURRENCY` | `8` | Parallel Yahoo requests |
@@ -99,14 +103,14 @@ docker run --rm --env-file .env -v "$PWD/reports:/app/reports" stock-alert-bot b
 ## Tests
 
 ```
-rule/MomentumRuleTest          threshold boundaries (1.49 / 1.50 / 1.51 %), sorting, bad prices
+rule/MomentumRuleTest          threshold boundaries (1.49 / 1.50 / 1.51 %), sorting, top-N, bad prices
 market/PriceSeriesTest         which bar is "the price at 09:30", stale/illiquid stocks
 market/YahooFinanceSourceTest  real response fixture, URL encoding (M&M), 429 retry, 5xx give-up, 404
 market/UniverseTest            NSE CSV parsing, download → cache → fallback
 market/MarketCalendarTest      weekends, NSE holidays, custom file
 ScannerTest                    end-to-end scan with a fake source, partial failures, concurrency cap
 notify/TelegramNotifierTest    request shape, token never leaks in errors, 4096-char splitting
-notify/AlertFormatterTest      message text, failure warning
+notify/AlertFormatterTest      message text, top-5 cut with "+N more", failure warning
 report/CsvReportTest           report contents
 ```
 

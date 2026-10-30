@@ -35,4 +35,9 @@ public final class MomentumRule {
                         .thenComparing(Observation::symbol))
                 .toList();
     }
+
+    /** The first {@code max} of already-sorted signals; {@code max <= 0} means no limit. */
+    public static List<Observation> top(List<Observation> signals, int max) {
+        return max <= 0 || signals.size() <= max ? signals : signals.subList(0, max);
+    }
 }

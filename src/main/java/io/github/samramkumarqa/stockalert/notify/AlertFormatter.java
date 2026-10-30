@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 
 import io.github.samramkumarqa.stockalert.Scanner;
+import io.github.samramkumarqa.stockalert.rule.MomentumRule;
 import io.github.samramkumarqa.stockalert.rule.Observation;
 
 /** Builds the human-readable alert text from a scan result. */
@@ -20,24 +21,37 @@ public final class AlertFormatter {
     private AlertFormatter() {
     }
 
-    public static Alert format(Scanner.Result r, double thresholdPct, List<Path> attachments) {
+    /**
+     * @param maxAlerts list at most this many top gainers; {@code <= 0} lists every signal
+     */
+    public static Alert format(Scanner.Result r, double thresholdPct, int maxAlerts, List<Path> attachments) {
         String window = r.baselineTime().format(HM) + " → " + r.checkTime().format(HM) + " IST";
         String pct = trim(thresholdPct);
+        List<Observation> shown = MomentumRule.top(r.signals(), maxAlerts);
+        int total = r.signals().size();
         List<String> lines = new ArrayList<>();
         String subject;
 
-        if (r.signals().isEmpty()) {
+        if (total == 0) {
             subject = "No buy alerts · " + r.date().format(DAY);
             lines.add("No stock rose more than " + pct + "% between " + window + ".");
         } else {
-            subject = "📈 BUY ALERT · " + r.signals().size() + " stock" + (r.signals().size() == 1 ? "" : "s")
-                    + " · " + r.date().format(DAY);
-            lines.add("Up more than " + pct + "% from " + window + ":");
+            String count = shown.size() < total
+                    ? "Top " + shown.size() + " of " + total + " stocks"
+                    : total + " stock" + (total == 1 ? "" : "s");
+            subject = "📈 BUY ALERT · " + count + " · " + r.date().format(DAY);
+            lines.add((shown.size() < total
+                    ? "Top " + shown.size() + " gainers, each up more than "
+                    : "Up more than ") + pct + "% from " + window + ":");
             lines.add("");
             int i = 1;
-            for (Observation o : r.signals()) {
+            for (Observation o : shown) {
                 lines.add(String.format(Locale.ENGLISH, "%d. %s  +%.2f%%  ₹%,.2f → ₹%,.2f",
                         i++, o.symbol(), o.changePct(), o.baselinePrice(), o.checkPrice()));
+            }
+            if (shown.size() < total) {
+                lines.add("");
+                lines.add("+" + (total - shown.size()) + " more above " + pct + "% (full list in the CSV report).");
             }
         }
         lines.add("");

@@ -91,11 +91,11 @@ public final class App {
             Scanner.Result result = scanner.scan(symbols, date, cfg.baselineTime(), cfg.checkTime());
             result.failures().stream().limit(20).forEach(f -> log.warn("Unpriced: {}", f));
 
-            Path csv = CsvReport.write(result, cfg.reportDir());
+            Path csv = CsvReport.write(result, cfg.maxAlerts(), cfg.reportDir());
             log.info("Report written to {}", csv);
 
             if (!result.signals().isEmpty() || cfg.sendWhenNoSignals() || !notify) {
-                deliver(AlertFormatter.format(result, rule.thresholdPct(), List.of(csv)), notifiers);
+                deliver(AlertFormatter.format(result, rule.thresholdPct(), cfg.maxAlerts(), List.of(csv)), notifiers);
             }
             return result.failureRate() > FAIL_RATE_ERROR ? 2 : 0;
         } catch (Exception e) {
