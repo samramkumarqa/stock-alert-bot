@@ -7,13 +7,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Probe Yahoo from a GitHub runner
+        shell: bash {0}
         run: |
           UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
           U='https://query1.finance.yahoo.com/v8/finance/chart/RELIANCE.NS?interval=1m&range=1d'
           c1=$(curl -s -o /dev/null -w '%{http_code}' "$U"); echo "::notice title=plain curl::$c1"
           c2=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" "$U"); echo "::notice title=curl+UA::$c2"
           c3=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" "${U/query1/query2}"); echo "::notice title=query2+UA::$c3"
-          curl -s -c jar -A "$UA" https://fc.yahoo.com -o /dev/null
+          curl -s -L -c jar -A "$UA" https://fc.yahoo.com -o /dev/null; echo "::notice title=fc.yahoo exit::$?"
           crumb=$(curl -s -b jar -A "$UA" https://query1.finance.yahoo.com/v1/test/getcrumb)
           c4=$(curl -s -o /dev/null -w '%{http_code}' -b jar -A "$UA" "$U&crumb=$crumb"); echo "::notice title=cookie+crumb::$c4 crumb=${crumb:0:6}"
           pip install -q yfinance curl_cffi >/dev/null 2>&1
