@@ -1,0 +1,80 @@
+name: Morning scan (9:30 → 9:45 IST)
+
+on:
+  schedule:
+    # 03:35 UTC = 09:05 IST, Mon–Fri. GitHub often starts scheduled jobs late,
+    # so the job starts early and the app itself waits until 09:46 IST.
+    # If GitHub starts it after 09:46, prices are still read for the exact
+    # 09:30 and 09:45 minutes; only the alert arrives late.
+    - cron: '35 3 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'live, or backtest'
+        default: 'live'
+      date:
+        description: 'Backtest date (YYYY-MM-DD)'
+        required: false
+      notify:
+        description: 'Send Telegram/email for a backtest too'
+        type: boolean
+        default: false
+
+concurrency:
+  group: morning-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Restore cached Nifty 500 list
+        uses: actions/cache@v4
+        with:
+          path: data/nifty500.csv
+          key: nifty500-${{ github.run_id }}
+          restore-keys: nifty500-
+
+      - name: Build
+        run: mvn -B -q -DskipTests package
+
+      - name: Run
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          THRESHOLD_PCT: ${{ vars.THRESHOLD_PCT || '1.5' }}
+          MODE: ${{ inputs.mode || 'live' }}
+          BACKTEST_DATE: ${{ inputs.date }}
+          BACKTEST_NOTIFY: ${{ inputs.notify }}
+        run: |
+          if [ "$MODE" = "backtest" ]; then
+            if ! [[ "$BACKTEST_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              echo "Backtest needs a date like 2026-10-29"; exit 1
+            fi
+            set -- backtest "$BACKTEST_DATE"
+            [ "$BACKTEST_NOTIFY" = "true" ] && set -- "$@" --notify
+          else
+            set -- live
+          fi
+          java -Dstdout.encoding=UTF-8 -jar target/stock-alert-bot.jar "$@"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-report-${{ github.run_id }}
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 30
