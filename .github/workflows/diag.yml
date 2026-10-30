@@ -1,0 +1,29 @@
+name: diag-yahoo
+on:
+  push:
+    branches: [diag-yahoo]
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Yahoo from a GitHub runner
+        run: |
+          UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
+          U='https://query1.finance.yahoo.com/v8/finance/chart/RELIANCE.NS?interval=1m&range=1d'
+          c1=$(curl -s -o /dev/null -w '%{http_code}' "$U"); echo "::notice title=plain curl::$c1"
+          c2=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" "$U"); echo "::notice title=curl+UA::$c2"
+          c3=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" "${U/query1/query2}"); echo "::notice title=query2+UA::$c3"
+          curl -s -c jar -A "$UA" https://fc.yahoo.com -o /dev/null
+          crumb=$(curl -s -b jar -A "$UA" https://query1.finance.yahoo.com/v1/test/getcrumb)
+          c4=$(curl -s -o /dev/null -w '%{http_code}' -b jar -A "$UA" "$U&crumb=$crumb"); echo "::notice title=cookie+crumb::$c4 crumb=${crumb:0:6}"
+          pip install -q yfinance curl_cffi >/dev/null 2>&1
+          python3 - <<'PY'
+          import yfinance as yf
+          try:
+              df = yf.download(["RELIANCE.NS","TCS.NS","INFY.NS"], period="1d", interval="1m", progress=False, threads=False)
+              print(f"::notice title=yfinance (curl_cffi)::rows={len(df)}")
+          except Exception as e:
+              print(f"::warning title=yfinance::{e}")
+          PY
+          for h in https://api.upstox.com https://www.nseindia.com/api/marketStatus; do
+            echo "::notice title=reach $h::$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" $h)"; done
