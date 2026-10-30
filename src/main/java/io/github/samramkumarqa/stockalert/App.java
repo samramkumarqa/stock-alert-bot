@@ -90,6 +90,14 @@ public final class App {
 
             Scanner.Result result = scanner.scan(symbols, date, cfg.baselineTime(), cfg.checkTime());
             result.failures().stream().limit(20).forEach(f -> log.warn("Unpriced: {}", f));
+            if ("true".equals(System.getenv("GITHUB_ACTIONS"))) {
+                // Shows up as annotations on the workflow run page.
+                System.out.printf("::notice title=Scan summary::%d of %d priced, %d failed, %d above threshold%n",
+                        result.observations().size(), result.symbolsRequested(), result.failures().size(),
+                        result.signals().size());
+                result.failures().stream().limit(5)
+                        .forEach(f -> System.out.println("::warning title=Unpriced::" + f.replace("\n", " ")));
+            }
 
             Path csv = CsvReport.write(result, cfg.maxAlerts(), cfg.reportDir());
             log.info("Report written to {}", csv);
