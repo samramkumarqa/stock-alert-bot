@@ -106,7 +106,8 @@ public final class Universe {
             }
             String series = seriesCol >= 0 && cols.length > seriesCol ? cols[seriesCol].strip() : "EQ";
             String symbol = cols[symbolCol].strip();
-            if (!symbol.isEmpty() && "EQ".equalsIgnoreCase(series)) {
+            // NSE parks "DUMMY..." placeholders in index files during demergers; they never trade.
+            if (!symbol.isEmpty() && "EQ".equalsIgnoreCase(series) && !symbol.toUpperCase().startsWith("DUMMY")) {
                 symbols.add(symbol);
             }
         }

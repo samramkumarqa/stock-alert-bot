@@ -30,6 +30,7 @@ class UniverseTest {
                 + "Reliance Industries Ltd.,Oil Gas & Consumable Fuels,RELIANCE,EQ,INE002A01018\r\n"
                 + "Mahindra & Mahindra Ltd.,Automobile,M&M,EQ,INE101A01026\r\n"
                 + "Some Bond,Financial Services,XYZ,BE,INE999\r\n"
+                + "Dummy Hexaware,Information Technology,DUMMYHEG,EQ,INE000000000\r\n"
                 + "Reliance Industries Ltd.,Oil Gas & Consumable Fuels,RELIANCE,EQ,INE002A01018\r\n";
 
         assertThat(Universe.parseCsv(csv)).containsExactly("RELIANCE", "M&M");

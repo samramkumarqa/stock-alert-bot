@@ -96,6 +96,12 @@ public final class App {
                 System.out.printf("::notice title=Scan summary::%d of %d priced, %d failed, %d above threshold%n",
                         result.observations().size(), result.symbolsRequested(), result.failures().size(),
                         result.signals().size());
+                if (!result.signals().isEmpty()) {
+                    String top = MomentumRule.top(result.signals(), cfg.maxAlerts()).stream()
+                            .map(o -> String.format(java.util.Locale.ENGLISH, "%s +%.2f%%", o.symbol(), o.changePct()))
+                            .collect(java.util.stream.Collectors.joining(", "));
+                    System.out.println("::notice title=Top gainers " + date + "::" + top);
+                }
                 result.failures().stream().limit(5)
                         .forEach(f -> System.out.println("::warning title=Unpriced::" + f.replace("\n", " ")));
             }
