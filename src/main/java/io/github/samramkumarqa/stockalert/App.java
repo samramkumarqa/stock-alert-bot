@@ -73,6 +73,11 @@ public final class App {
         }
         if (!calendar.isTradingDay(date) && !force) {
             log.info("{} is not an NSE trading day, nothing to do.", date);
+            if ("true".equals(System.getenv("GITHUB_ACTIONS"))) {
+                System.out.println("::notice title=Skipped::" + date + " (" + date.getDayOfWeek()
+                        + ") is not an NSE trading day, so no scan and no alert. To test, run mode=backtest "
+                        + "with a past trading date and tick notify.");
+            }
             return 0;
         }
 
