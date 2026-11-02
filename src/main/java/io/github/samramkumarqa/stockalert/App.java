@@ -1,11 +1,13 @@
 package io.github.samramkumarqa.stockalert;
 
 import java.net.http.HttpClient;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -83,7 +85,20 @@ public final class App {
 
         try {
             if (mode.equals("live")) {
-                waitUntil(date.atTime(cfg.checkTime()).atZone(cfg.zone()).toInstant().plus(cfg.fetchDelay()), clock);
+                Instant due = date.atTime(cfg.checkTime()).atZone(cfg.zone()).toInstant().plus(cfg.fetchDelay());
+                Duration late = Duration.between(due, clock.instant());
+                if (!force && late.compareTo(cfg.maxLate()) > 0) {
+                    // A 9:45 alert that arrives hours later is noise; say what happened instead.
+                    String when = LocalTime.now(clock.withZone(cfg.zone())).withNano(0).toString();
+                    log.warn("Started {} min after the alert time; skipping the scan.", late.toMinutes());
+                    if ("true".equals(System.getenv("GITHUB_ACTIONS"))) {
+                        System.out.println("::warning title=Too late::Run started at " + when + " IST, "
+                                + late.toMinutes() + " min after the alert time; no buy alert sent.");
+                    }
+                    deliver(AlertFormatter.late(date, when), notifiers);
+                    return 0;
+                }
+                waitUntil(due, clock);
             }
 
             HttpClient http = HttpClient.newBuilder()
@@ -115,7 +130,12 @@ public final class App {
             log.info("Report written to {}", csv);
 
             if (!result.signals().isEmpty() || cfg.sendWhenNoSignals() || !notify) {
-                deliver(AlertFormatter.format(result, rule.thresholdPct(), cfg.maxAlerts(), List.of(csv)), notifiers);
+                int sent = deliver(AlertFormatter.format(result, rule.thresholdPct(), cfg.maxAlerts(), List.of(csv)),
+                        notifiers);
+                if (mode.equals("live") && sent > 0) {
+                    // The workflow caches this marker so a second trigger the same day doesn't alert twice.
+                    Files.writeString(cfg.reportDir().resolve("alert-sent-" + date), clock.instant().toString());
+                }
             }
             return result.failureRate() > FAIL_RATE_ERROR ? 2 : 0;
         } catch (Exception e) {
@@ -159,16 +179,24 @@ public final class App {
         return list;
     }
 
-    /** Sends to every channel; one failing channel never blocks the others. */
-    static void deliver(Alert alert, List<Notifier> notifiers) {
+    /**
+     * Sends to every channel; one failing channel never blocks the others.
+     * @return how many external channels (Telegram/email, not the console) accepted the alert
+     */
+    static int deliver(Alert alert, List<Notifier> notifiers) {
+        int external = 0;
         for (Notifier n : notifiers) {
             try {
                 n.send(alert);
                 log.info("Alert sent via {}", n.name());
+                if (!(n instanceof ConsoleNotifier)) {
+                    external++;
+                }
             } catch (Exception e) {
                 log.error("Could not send via {}: {}", n.name(), e.getMessage());
             }
         }
+        return external;
     }
 
     private static void waitUntil(Instant target, Clock clock) throws InterruptedException {

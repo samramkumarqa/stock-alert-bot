@@ -1,12 +1,9 @@
 name: Morning scan (9:30 → 9:45 IST)
 
 on:
-  schedule:
-    # 03:35 UTC = 09:05 IST, Mon–Fri. GitHub often starts scheduled jobs late,
-    # so the job starts early and the app itself waits until 09:46 IST.
-    # If GitHub starts it after 09:46, prices are still read for the exact
-    # 09:30 and 09:45 minutes; only the alert arrives late.
-    - cron: '35 3 * * 1-5'
+  # PRIMARY trigger: cron-job.org calls the workflow_dispatch API at 09:35 IST, Mon–Fri
+  # (see README → "On-time trigger"). It fires on the minute; GitHub's own scheduler
+  # does not: on 2 Nov 2026 the 09:05 schedule started at 17:07.
   workflow_dispatch:
     inputs:
       mode:
@@ -19,34 +16,64 @@ on:
         description: 'Send Telegram/email for a backtest too'
         type: boolean
         default: false
+  # BACKUP trigger: GitHub's scheduler, 03:35 UTC = 09:05 IST. If it starts on time it
+  # covers a missed primary; if it starts late, the bot sends a short "started late"
+  # warning instead of a stale buy list. Either way, only one buy alert per day is sent.
+  schedule:
+    - cron: '35 3 * * 1-5'
 
 concurrency:
   group: morning-scan
   cancel-in-progress: false
+
+env:
+  MODE: ${{ inputs.mode || 'live' }}
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
+      - name: Today (IST)
+        id: day
+        run: echo "day=$(TZ=Asia/Kolkata date +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Already alerted today?
+        id: sent
+        if: env.MODE == 'live'
+        uses: actions/cache/restore@v4
+        with:
+          path: reports/alert-sent-${{ steps.day.outputs.day }}
+          key: alert-sent-${{ steps.day.outputs.day }}
+          lookup-only: true
+
+      - name: Skip duplicate
+        if: steps.sent.outputs.cache-hit == 'true'
+        run: echo "::notice title=Skipped::Today's buy alert was already sent by an earlier run."
+
       - uses: actions/checkout@v5
+        if: steps.sent.outputs.cache-hit != 'true'
 
       - uses: actions/setup-java@v5
+        if: steps.sent.outputs.cache-hit != 'true'
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
       - uses: actions/setup-python@v6
+        if: steps.sent.outputs.cache-hit != 'true'
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: scripts/requirements.txt
 
       - name: Install price fetcher (yfinance)
+        if: steps.sent.outputs.cache-hit != 'true'
         run: pip install -q -r scripts/requirements.txt
 
       - name: Restore cached Nifty 500 list
+        if: steps.sent.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: data/nifty500.csv
@@ -54,9 +81,11 @@ jobs:
           restore-keys: nifty500-
 
       - name: Build
+        if: steps.sent.outputs.cache-hit != 'true'
         run: mvn -B -q -DskipTests package
 
       - name: Run
+        if: steps.sent.outputs.cache-hit != 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -65,7 +94,7 @@ jobs:
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
           THRESHOLD_PCT: ${{ vars.THRESHOLD_PCT || '1.5' }}
           MAX_ALERTS: ${{ vars.MAX_ALERTS || '5' }}
-          MODE: ${{ inputs.mode || 'live' }}
+          MAX_LATE_MINUTES: ${{ vars.MAX_LATE_MINUTES || '30' }}
           BACKTEST_DATE: ${{ inputs.date }}
           BACKTEST_NOTIFY: ${{ inputs.notify }}
         run: |
@@ -78,10 +107,18 @@ jobs:
           else
             set -- live
           fi
+          echo "Started at $(TZ=Asia/Kolkata date +%H:%M:%S) IST by ${{ github.event_name }}"
           java -Dstdout.encoding=UTF-8 -jar target/stock-alert-bot.jar "$@"
 
+      - name: Remember today's alert was sent
+        if: always() && env.MODE == 'live' && hashFiles(format('reports/alert-sent-{0}', steps.day.outputs.day)) != ''
+        uses: actions/cache/save@v4
+        with:
+          path: reports/alert-sent-${{ steps.day.outputs.day }}
+          key: alert-sent-${{ steps.day.outputs.day }}
+
       - name: Upload report
-        if: always()
+        if: always() && steps.sent.outputs.cache-hit != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: scan-report-${{ github.run_id }}

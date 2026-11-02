@@ -24,7 +24,7 @@ Checked 498 of 500 stocks.
 ## How it works
 
 ```
-GitHub Actions (09:05 IST, Mon–Fri)
+cron-job.org → GitHub Actions (09:35 IST, Mon–Fri; GitHub schedule as backup)
   └─ App waits until 09:46 IST
       ├─ Universe        Nifty 500 list from NSE (cached copy as fallback)
       ├─ YfinanceSource  runs scripts/fetch_bars.py once: 1-minute bars for all SYMBOL.NS (yfinance)
@@ -38,7 +38,7 @@ Design choices:
 
 - **Yahoo Finance data.** It's free, needs no login or token, and Yahoo lists NSE data as real-time. Because it returns the whole morning's 1-minute bars, a single fetch after 9:45 gives both prices.
 - **One small Python step.** Yahoo blocks plain HTTP clients from cloud servers: from a GitHub runner, Java's HTTP client and even `curl` get HTTP 429 on every request. The [yfinance](https://github.com/ranaroussi/yfinance) library looks like a real browser and is accepted, so `scripts/fetch_bars.py` does the download and everything else stays in Java. The pure-Java client is still there (`PRICE_SOURCE=yahoo-http`) for networks where Yahoo allows it.
-- **Exact prices even if the job starts late.** GitHub often starts scheduled jobs late. That doesn't matter here: the 9:30 and 9:45 prices are read from the bars, not "now", so a late start still yields the exact prices and only delays the alert.
+- **Exact prices, and an on-time trigger.** The 9:30 and 9:45 prices come from the 1-minute bars, not from "now". An external scheduler starts the job, because GitHub's own scheduler can run hours late, and a run that starts too late sends a warning instead of a stale buy list.
 - **Telegram for alerts.** It's free and gives an instant push notification, with no SMS registration or per-message fees.
 - **Secrets only in env vars and GitHub Secrets**, never in code.
 - **Market calendar.** Weekends and NSE holidays (`src/main/resources/nse-holidays.txt`) are skipped.
@@ -62,6 +62,32 @@ Design choices:
 
    To change the threshold or the number of stocks, add repository **variables** `THRESHOLD_PCT` (default `1.5`) and `MAX_ALERTS` (default `5`).
 4. **Test it:** go to Actions → *Morning scan* → *Run workflow* → mode `backtest`, a recent trading date, tick *notify*. You should get the alert for that day within a minute.
+
+5. **On-time trigger (needed).** See the next section.
+
+## On-time trigger (cron-job.org)
+
+GitHub's built-in scheduler is "best effort". On 2 Nov 2026, the 09:05 schedule only started at **17:07**. To get the alert at 9:46, a free external scheduler starts the workflow instead, and it fires on the minute.
+
+1. **Create a GitHub token** that can only start this workflow: GitHub → your avatar → Settings → Developer settings → **Fine-grained tokens** → *Generate new token*.
+   - Repository access: *Only select repositories* → `stock-alert-bot`
+   - Permissions → Repository → **Actions: Read and write** (leave the rest at "No access")
+   - Expiration: 1 year. Set yourself a reminder to renew it.
+2. **Create a free account at [cron-job.org](https://cron-job.org)** → *Create cronjob*:
+   - URL: `https://api.github.com/repos/samramkumarqa/stock-alert-bot/actions/workflows/morning-scan.yml/dispatches`
+   - Schedule: custom, **09:35**, Monday–Friday, time zone **Asia/Kolkata**
+   - *Advanced* tab: request method **POST**; headers `Authorization: Bearer <your token>`, `Accept: application/vnd.github+json`, `Content-Type: application/json`; request body `{"ref":"main"}`
+   - Turn on "notify me on failure".
+3. Click **Test run**. GitHub replies `204` and a new run appears under Actions. On a weekend it just logs "not an NSE trading day".
+
+How the two triggers work together:
+
+| | |
+|---|---|
+| cron-job.org, 09:35 | Primary. The run waits until 09:46, scans, and sends the alert. |
+| GitHub schedule, 09:05 | Backup, in case cron-job.org misses a day. |
+| Same-day duplicate | The first run that sends saves an `alert-sent-<date>` marker, and later runs that day stop at once. |
+| Run starts after 10:16 (`MAX_LATE_MINUTES`=30) | No stale buy list. You get "⚠ Morning scan started late" instead, so you know the trigger failed. |
 
 After that, it runs by itself every weekday.
 
@@ -102,6 +128,7 @@ docker run --rm --env-file .env -v "$PWD/reports:/app/reports" stock-alert-bot b
 | `PRICE_SOURCE` | `yfinance` | `yfinance` (Python fetcher), or `yahoo-http` (pure Java; blocked from cloud servers) |
 | `PYTHON` / `FETCH_SCRIPT` | `python3` / `scripts/fetch_bars.py` | How the bot runs the fetcher |
 | `FETCH_CONCURRENCY` | `8` | Parallel requests (`yahoo-http` only) |
+| `MAX_LATE_MINUTES` | `30` | In live mode, skip the buy list (send a "started late" warning) if the run starts more than this after the alert time. `--force` overrides it |
 | `SEND_WHEN_NO_SIGNALS` | `true` | Send a "no alerts today" message, so you know it ran |
 | `UNIVERSE_URLS` | NSE Nifty 500 CSV | Comma-separated; use a Nifty 50 / 200 CSV URL for a smaller list |
 | `UNIVERSE_FILE` | `data/nifty500.csv` | Cache, or your own list |
@@ -116,6 +143,7 @@ market/YfinanceSourceTest      Java ↔ Python bridge with a fake fetcher: CSV h
 market/YahooFinanceSourceTest  pure-Java client: response fixture, URL encoding (M&M), 429 retry, 5xx give-up, 404
 market/UniverseTest            NSE CSV parsing, download → cache → fallback
 market/MarketCalendarTest      weekends, NSE holidays, custom file
+AppTest                        live timing: late start skipped with a warning, on-time run leaves the once-a-day marker
 ScannerTest                    end-to-end scan with a fake source, partial failures, concurrency cap
 notify/TelegramNotifierTest    request shape, token never leaks in errors, 4096-char splitting
 notify/AlertFormatterTest      message text, top-5 cut with "+N more", failure warning

@@ -1,6 +1,7 @@
 package io.github.samramkumarqa.stockalert.notify;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +64,13 @@ public final class AlertFormatter {
         }
         lines.add("Alert only, no orders were placed. Data: Yahoo Finance (NSE).");
         return new Alert(subject, String.join("\n", lines), attachments);
+    }
+
+    /** Sent instead of a stale buy list when the job started long after the alert time. */
+    public static Alert late(LocalDate date, String startedAt) {
+        return new Alert("⚠ Morning scan started late · " + date.format(DAY),
+                "The scan only started at " + startedAt + " IST, too late for a 9:45 buy alert, so none was sent.\n"
+                + "Check the trigger (cron-job.org) and the GitHub Actions run history.", List.of());
     }
 
     public static Alert failure(String what, Throwable error) {
