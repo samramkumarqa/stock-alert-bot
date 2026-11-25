@@ -24,7 +24,7 @@ public final class MomentumRule {
     }
 
     public boolean triggers(Observation o) {
-        return o.baselinePrice() > 0 && o.checkPrice() > 0 && o.changePct() > thresholdPct;
+        return o.baselinePrice() > 0 && o.checkPrice() > 0 && o.changePct() > thresholdPct && o.stillRising();
     }
 
     /** Stocks that trigger, biggest gain first. */

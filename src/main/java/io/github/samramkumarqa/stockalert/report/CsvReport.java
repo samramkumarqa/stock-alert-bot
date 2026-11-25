@@ -30,13 +30,16 @@ public final class CsvReport {
         Set<String> alerted = MomentumRule.top(r.signals(), maxAlerts).stream()
                 .map(Observation::symbol).collect(Collectors.toSet());
 
+        boolean confirm = r.confirmTime() != null;
         List<String> rows = new ArrayList<>();
-        rows.add("symbol,price_" + r.baselineTime() + ",price_" + r.checkTime()
-                + ",change_pct,above_threshold,buy_alert");
+        rows.add("symbol,price_" + r.baselineTime() + (confirm ? ",price_" + r.confirmTime() : "")
+                + ",price_" + r.checkTime() + ",change_pct,above_threshold,buy_alert");
         r.observations().stream()
                 .sorted((a, b) -> Double.compare(b.changePct(), a.changePct()))
-                .forEach(o -> rows.add(String.format(Locale.ENGLISH, "%s,%.2f,%.2f,%.3f,%s,%s",
-                        o.symbol(), o.baselinePrice(), o.checkPrice(), o.changePct(),
+                .forEach(o -> rows.add(String.format(Locale.ENGLISH, "%s,%.2f%s,%.2f,%.3f,%s,%s",
+                        o.symbol(), o.baselinePrice(),
+                        confirm ? String.format(Locale.ENGLISH, ",%.2f", o.confirmPrice()) : "",
+                        o.checkPrice(), o.changePct(),
                         qualified.contains(o.symbol()) ? "YES" : "",
                         alerted.contains(o.symbol()) ? "YES" : "")));
         // Excel opens UTF-8 correctly only with a BOM.

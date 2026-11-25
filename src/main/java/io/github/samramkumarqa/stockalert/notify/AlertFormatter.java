@@ -26,7 +26,8 @@ public final class AlertFormatter {
      * @param maxAlerts list at most this many top gainers; {@code <= 0} lists every signal
      */
     public static Alert format(Scanner.Result r, double thresholdPct, int maxAlerts, List<Path> attachments) {
-        String window = r.baselineTime().format(HM) + " → " + r.checkTime().format(HM) + " IST";
+        String window = r.baselineTime().format(HM) + " → " + r.checkTime().format(HM) + " IST"
+                + (r.confirmTime() == null ? "" : ", still rising since " + r.confirmTime().format(HM));
         String pct = trim(thresholdPct);
         List<Observation> shown = MomentumRule.top(r.signals(), maxAlerts);
         int total = r.signals().size();

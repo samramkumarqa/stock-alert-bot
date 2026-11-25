@@ -15,6 +15,7 @@ public record AppConfig(
         ZoneId zone,
         LocalTime baselineTime,
         LocalTime checkTime,
+        Optional<LocalTime> confirmTime,
         double thresholdPct,
         int maxAlerts,
         Duration fetchDelay,
@@ -51,7 +52,12 @@ public record AppConfig(
         return new AppConfig(
                 ZoneId.of(e.get("MARKET_TIMEZONE", "Asia/Kolkata")),
                 LocalTime.parse(e.get("BASELINE_TIME", "09:15")),
-                LocalTime.parse(e.get("CHECK_TIME", "09:30")),
+                LocalTime.parse(e.get("CHECK_TIME", "09:45")),
+                // "Still rising" check (rule C): price at CHECK_TIME must be >= price at CONFIRM_TIME.
+                // Set CONFIRM_TIME=none to turn it off.
+                Optional.of(e.get("CONFIRM_TIME", "09:30"))
+                        .filter(v -> !v.equalsIgnoreCase("none") && !v.equalsIgnoreCase("off"))
+                        .map(LocalTime::parse),
                 Double.parseDouble(e.get("THRESHOLD_PCT", "1.5")),
                 Integer.parseInt(e.get("MAX_ALERTS", "5")),
                 Duration.ofSeconds(Long.parseLong(e.get("FETCH_DELAY_SECONDS", "60"))),

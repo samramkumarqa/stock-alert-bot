@@ -33,4 +33,15 @@ class CsvReportTest {
         assertThat(lines.get(2)).isEqualTo("SBIN,800.00,813.00,1.625,YES,");
         assertThat(lines.get(3)).isEqualTo("INFY,1500.00,1500.00,0.000,,");
     }
+
+    @Test
+    void addsTheConfirmPriceColumnWhenUsed(@TempDir Path dir) throws Exception {
+        Observation fade = new Observation("FADE", 100, 102, 104);
+        Scanner.Result r = new Scanner.Result(LocalDate.of(2026, 11, 26), LocalTime.of(9, 15), LocalTime.of(9, 45),
+                1, List.of(fade), List.of(), List.of(), LocalTime.of(9, 30));
+
+        List<String> lines = Files.readAllLines(CsvReport.write(r, 5, dir));
+        assertThat(lines.get(0)).endsWith("symbol,price_09:15,price_09:30,price_09:45,change_pct,above_threshold,buy_alert");
+        assertThat(lines.get(1)).isEqualTo("FADE,100.00,104.00,102.00,2.000,,");
+    }
 }

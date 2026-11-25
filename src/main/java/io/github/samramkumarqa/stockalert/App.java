@@ -33,7 +33,7 @@ import io.github.samramkumarqa.stockalert.rule.MomentumRule;
 /**
  * Entry point.
  * <pre>
- *   java -jar stock-alert-bot.jar                    # live: wait for 9:30 IST, scan, alert
+ *   java -jar stock-alert-bot.jar                    # live: wait for 9:45 IST, scan, alert
  *   java -jar stock-alert-bot.jar backtest 2026-10-29 # replay a past day (Yahoo keeps ~30 days of 1m bars)
  *   flags: --dry-run (console only)  --force (run even on a holiday/weekend)
  * </pre>
@@ -109,7 +109,8 @@ public final class App {
             MomentumRule rule = new MomentumRule(cfg.thresholdPct());
             Scanner scanner = new Scanner(priceSource(cfg, http), rule, cfg.zone(), cfg.fetchConcurrency());
 
-            Scanner.Result result = scanner.scan(symbols, date, cfg.baselineTime(), cfg.checkTime());
+            Scanner.Result result = scanner.scan(symbols, date, cfg.baselineTime(),
+                    cfg.confirmTime().orElse(null), cfg.checkTime());
             result.failures().stream().limit(20).forEach(f -> log.warn("Unpriced: {}", f));
             if ("true".equals(System.getenv("GITHUB_ACTIONS"))) {
                 // Shows up as annotations on the workflow run page.

@@ -33,7 +33,14 @@ public final class Scanner {
             int symbolsRequested,
             List<Observation> observations,
             List<Observation> signals,
-            List<String> failures) {
+            List<String> failures,
+            /** Optional "still rising since" time between baseline and check; {@code null} if unused. */
+            LocalTime confirmTime) {
+
+        public Result(LocalDate date, LocalTime baselineTime, LocalTime checkTime, int symbolsRequested,
+                List<Observation> observations, List<Observation> signals, List<String> failures) {
+            this(date, baselineTime, checkTime, symbolsRequested, observations, signals, failures, null);
+        }
 
         public double failureRate() {
             return symbolsRequested == 0 ? 0 : (double) failures.size() / symbolsRequested;
@@ -54,9 +61,19 @@ public final class Scanner {
 
     public Result scan(List<String> symbols, LocalDate date, LocalTime baselineTime, LocalTime checkTime)
             throws InterruptedException, java.io.IOException {
+        return scan(symbols, date, baselineTime, null, checkTime);
+    }
+
+    /**
+     * @param confirmTime when not {@code null}, a stock only qualifies if its check price is at or
+     *                    above its price at this time (still rising)
+     */
+    public Result scan(List<String> symbols, LocalDate date, LocalTime baselineTime, LocalTime confirmTime,
+            LocalTime checkTime) throws InterruptedException, java.io.IOException {
         source.prefetch(symbols, date);
         Instant baseline = date.atTime(baselineTime).atZone(zone).toInstant();
         Instant check = date.atTime(checkTime).atZone(zone).toInstant();
+        Instant confirm = confirmTime == null ? null : date.atTime(confirmTime).atZone(zone).toInstant();
 
         List<Observation> observations = Collections.synchronizedList(new ArrayList<>());
         List<String> failures = Collections.synchronizedList(new ArrayList<>());
@@ -71,10 +88,13 @@ public final class Scanner {
                         PriceSeries series = source.intraday(symbol, date);
                         OptionalDouble p0 = series.priceAt(baseline);
                         OptionalDouble p1 = series.priceAt(check);
-                        if (p0.isEmpty() || p1.isEmpty()) {
-                            failures.add(symbol + ": no trades near " + (p0.isEmpty() ? baselineTime : checkTime));
+                        OptionalDouble pc = confirm == null ? OptionalDouble.of(Double.NaN) : series.priceAt(confirm);
+                        if (p0.isEmpty() || p1.isEmpty() || pc.isEmpty()) {
+                            failures.add(symbol + ": no trades near "
+                                    + (p0.isEmpty() ? baselineTime : p1.isEmpty() ? checkTime : confirmTime));
                         } else {
-                            observations.add(new Observation(symbol, p0.getAsDouble(), p1.getAsDouble()));
+                            observations.add(new Observation(symbol, p0.getAsDouble(), p1.getAsDouble(),
+                                    pc.getAsDouble()));
                         }
                     } catch (Exception e) {
                         failures.add(symbol + ": " + e.getMessage());
@@ -98,6 +118,7 @@ public final class Scanner {
         List<String> sortedFailures = failures.stream().sorted().toList();
         log.info("Scanned {} symbols: {} priced, {} failed, {} signals",
                 symbols.size(), sorted.size(), sortedFailures.size(), rule.signals(sorted).size());
-        return new Result(date, baselineTime, checkTime, symbols.size(), sorted, rule.signals(sorted), sortedFailures);
+        return new Result(date, baselineTime, checkTime, symbols.size(), sorted, rule.signals(sorted), sortedFailures,
+                confirmTime);
     }
 }

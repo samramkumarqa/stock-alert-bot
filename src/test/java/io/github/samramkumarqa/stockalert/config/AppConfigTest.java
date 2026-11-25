@@ -14,12 +14,19 @@ class AppConfigTest {
         AppConfig c = AppConfig.from(Map.of());
 
         assertThat(c.baselineTime()).isEqualTo(LocalTime.of(9, 15));
-        assertThat(c.checkTime()).isEqualTo(LocalTime.of(9, 30));
+        assertThat(c.checkTime()).isEqualTo(LocalTime.of(9, 45));
+        assertThat(c.confirmTime()).contains(LocalTime.of(9, 30));
         assertThat(c.thresholdPct()).isEqualTo(1.5);
         assertThat(c.maxAlerts()).isEqualTo(5);
         assertThat(c.zone().getId()).isEqualTo("Asia/Kolkata");
         assertThat(c.telegramEnabled()).isFalse();
         assertThat(c.emailEnabled()).isFalse();
+    }
+
+    @Test
+    void stillRisingCheckCanBeTurnedOff() {
+        assertThat(AppConfig.from(Map.of("CONFIRM_TIME", "none")).confirmTime()).isEmpty();
+        assertThat(AppConfig.from(Map.of("CONFIRM_TIME", "09:40")).confirmTime()).contains(LocalTime.of(9, 40));
     }
 
     @Test

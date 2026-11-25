@@ -53,6 +53,29 @@ class ScannerTest {
     }
 
     @Test
+    void confirmTimeDropsStocksThatFadeAfterIt() throws Exception {
+        // Bars: 09:14 -> price at 09:15, 09:29 -> 09:30, 09:44 -> 09:45
+        PriceSource src = (symbol, date) -> {
+            double[] p = switch (symbol) {
+                case "TREND" -> new double[] {100, 101, 103};   // +3%, rising
+                case "FADE" -> new double[] {100, 105, 103};    // +3%, falling since 09:30
+                default -> new double[] {100, 100, 100};
+            };
+            return new PriceSeries(symbol, List.of(
+                    new PriceSeries.Bar(date.atTime(9, 14).atZone(IST).toInstant(), p[0]),
+                    new PriceSeries.Bar(date.atTime(9, 29).atZone(IST).toInstant(), p[1]),
+                    new PriceSeries.Bar(date.atTime(9, 44).atZone(IST).toInstant(), p[2])));
+        };
+        Scanner.Result r = new Scanner(src, new MomentumRule(1.5), IST, 2)
+                .scan(List.of("TREND", "FADE", "FLAT"), DAY, LocalTime.of(9, 15), T930, T945);
+
+        assertThat(r.signals()).extracting(Observation::symbol).containsExactly("TREND");
+        assertThat(r.confirmTime()).isEqualTo(T930);
+        assertThat(r.observations()).filteredOn(o -> o.symbol().equals("FADE"))
+                .singleElement().satisfies(o -> assertThat(o.confirmPrice()).isEqualTo(105));
+    }
+
+    @Test
     void oneBadSymbolDoesNotStopTheScan() throws Exception {
         Scanner scanner = new Scanner(fake(Map.of("GOOD", new double[] {100, 103})), new MomentumRule(1.5), IST, 2);
 

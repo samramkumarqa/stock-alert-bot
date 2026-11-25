@@ -27,6 +27,18 @@ class MomentumRuleTest {
     }
 
     @Test
+    void stillRisingCheckRejectsStocksFadingAfterTheConfirmTime() {
+        // 9:15 open 100, 9:30 104, 9:45 102: +2% overall but falling since 9:30
+        assertThat(rule.triggers(new Observation("FADE", 100, 102, 104))).isFalse();
+        // 9:15 open 100, 9:30 101, 9:45 102: +2% and still rising
+        assertThat(rule.triggers(new Observation("TREND", 100, 102, 101))).isTrue();
+        // flat since 9:30 counts as still rising
+        assertThat(rule.triggers(new Observation("HOLD", 100, 102, 102))).isTrue();
+        // no confirm price: rule behaves as before
+        assertThat(rule.triggers(new Observation("PLAIN", 100, 102))).isTrue();
+    }
+
+    @Test
     void ignoresBadPrices() {
         assertThat(rule.triggers(new Observation("ZERO", 0, 10))).isFalse();
         assertThat(rule.triggers(new Observation("NEG", 10, -1))).isFalse();

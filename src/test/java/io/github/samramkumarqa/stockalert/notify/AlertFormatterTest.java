@@ -54,6 +54,17 @@ class AlertFormatterTest {
     }
 
     @Test
+    void mentionsTheStillRisingCheck() {
+        Observation tm = new Observation("TATAMOTORS", 700, 720, 712);
+        Scanner.Result r = new Scanner.Result(LocalDate.of(2026, 11, 26), LocalTime.of(9, 15), LocalTime.of(9, 45),
+                1, List.of(tm), List.of(tm), List.of(), LocalTime.of(9, 30));
+
+        assertThat(AlertFormatter.format(r, 1.5, 5, List.of()).body())
+                .contains("Up more than 1.5% from 9:15 → 9:45 IST, still rising since 9:30:")
+                .contains("1. TATAMOTORS  +2.86%  ₹700.00 → ₹720.00");
+    }
+
+    @Test
     void zeroMeansNoLimit() {
         List<Observation> signals = IntStream.range(0, 8)
                 .mapToObj(i -> new Observation("G" + i, 100, 110)).toList();
