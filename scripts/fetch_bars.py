@@ -5,9 +5,10 @@ Why Python for this one step: Yahoo returns HTTP 429 to plain HTTP clients
 (Java, curl) from cloud machines such as GitHub runners. yfinance uses
 curl_cffi to look like a real browser, which Yahoo accepts.
 
-Output CSV (read by the Java bot):  symbol,epoch,close
+Output CSV (read by the Java bot):  symbol,epoch,open,close
   symbol  NSE symbol without the .NS suffix
   epoch   bar START time, Unix seconds
+  open    bar open price (for the 09:15 bar: the day's opening price)
   close   bar close price
 
 Usage:
@@ -31,21 +32,25 @@ def ticker(symbol: str) -> str:
     return f"{symbol}.NS"
 
 
-def to_rows(df, symbols: Iterable[str]) -> list[tuple[str, int, float]]:
-    """Flatten a yfinance download (group_by='ticker') into (symbol, epoch, close) rows."""
-    rows: list[tuple[str, int, float]] = []
+def to_rows(df, symbols: Iterable[str]) -> list[tuple[str, int, float, float]]:
+    """Flatten a yfinance download (group_by='ticker') into (symbol, epoch, open, close) rows."""
+    rows: list[tuple[str, int, float, float]] = []
     if df is None or df.empty:
         return rows
     multi = getattr(df.columns, "nlevels", 1) > 1
     for symbol in symbols:
         t = ticker(symbol)
         try:
-            closes = df[t]["Close"] if multi else df["Close"]
+            frame = df[t] if multi else df
+            closes = frame["Close"]
         except KeyError:
             continue
+        opens = frame["Open"] if "Open" in frame else closes
         for ts, close in closes.dropna().items():
             if close > 0:
-                rows.append((symbol, int(ts.timestamp()), round(float(close), 4)))
+                o = opens.get(ts)
+                o = float(o) if o is not None and o == o and o > 0 else float(close)  # o == o: not NaN
+                rows.append((symbol, int(ts.timestamp()), round(o, 4), round(float(close), 4)))
     return rows
 
 
@@ -68,8 +73,8 @@ def download(symbols: list[str], day: dt.date):
     )
 
 
-def fetch(symbols: list[str], day: dt.date, pause: float = 2.0) -> list[tuple[str, int, float]]:
-    rows: list[tuple[str, int, float]] = []
+def fetch(symbols: list[str], day: dt.date, pause: float = 2.0) -> list[tuple[str, int, float, float]]:
+    rows: list[tuple[str, int, float, float]] = []
     for i in range(0, len(symbols), BATCH):
         chunk = symbols[i:i + BATCH]
         rows += to_rows(download(chunk, day), chunk)
@@ -100,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = fetch(symbols, a.date)
     with open(a.out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["symbol", "epoch", "close"])
+        w.writerow(["symbol", "epoch", "open", "close"])
         w.writerows(rows)
 
     priced = len({r[0] for r in rows})

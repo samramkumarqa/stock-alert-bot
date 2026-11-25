@@ -33,7 +33,7 @@ import io.github.samramkumarqa.stockalert.rule.MomentumRule;
 /**
  * Entry point.
  * <pre>
- *   java -jar stock-alert-bot.jar                    # live: wait for 9:45 IST, scan, alert
+ *   java -jar stock-alert-bot.jar                    # live: wait for 9:30 IST, scan, alert
  *   java -jar stock-alert-bot.jar backtest 2026-10-29 # replay a past day (Yahoo keeps ~30 days of 1m bars)
  *   flags: --dry-run (console only)  --force (run even on a holiday/weekend)
  * </pre>
@@ -88,7 +88,7 @@ public final class App {
                 Instant due = date.atTime(cfg.checkTime()).atZone(cfg.zone()).toInstant().plus(cfg.fetchDelay());
                 Duration late = Duration.between(due, clock.instant());
                 if (!force && late.compareTo(cfg.maxLate()) > 0) {
-                    // A 9:45 alert that arrives hours later is noise; say what happened instead.
+                    // A morning alert that arrives hours later is noise; say what happened instead.
                     String when = LocalTime.now(clock.withZone(cfg.zone())).withNano(0).toString();
                     log.warn("Started {} min after the alert time; skipping the scan.", late.toMinutes());
                     if ("true".equals(System.getenv("GITHUB_ACTIONS"))) {

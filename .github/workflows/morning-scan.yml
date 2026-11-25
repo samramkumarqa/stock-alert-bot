@@ -1,7 +1,7 @@
-name: Morning scan (9:30 → 9:45 IST)
+name: Morning scan (9:15 → 9:30 IST)
 
 on:
-  # PRIMARY trigger: cron-job.org calls the workflow_dispatch API at 09:35 IST, Mon–Fri
+  # PRIMARY trigger: cron-job.org calls the workflow_dispatch API at 09:20 IST, Mon–Fri
   # (see README → "On-time trigger"). It fires on the minute; GitHub's own scheduler
   # does not: on 2 Nov 2026 the 09:05 schedule started at 17:07.
   workflow_dispatch:

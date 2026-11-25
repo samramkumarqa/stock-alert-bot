@@ -69,7 +69,7 @@ public final class AlertFormatter {
     /** Sent instead of a stale buy list when the job started long after the alert time. */
     public static Alert late(LocalDate date, String startedAt) {
         return new Alert("⚠ Morning scan started late · " + date.format(DAY),
-                "The scan only started at " + startedAt + " IST, too late for a 9:45 buy alert, so none was sent.\n"
+                "The scan only started at " + startedAt + " IST, too late for the morning buy alert, so none was sent.\n"
                 + "Check the trigger (cron-job.org) and the GitHub Actions run history.", List.of());
     }
 

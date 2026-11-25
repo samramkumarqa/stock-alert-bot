@@ -28,7 +28,9 @@ public final class YahooChartParser {
             throw new IOException("Yahoo returned no result for " + symbol);
         }
         JsonNode timestamps = result.path("timestamp");
-        JsonNode closes = result.path("indicators").path("quote").path(0).path("close");
+        JsonNode quote = result.path("indicators").path("quote").path(0);
+        JsonNode closes = quote.path("close");
+        JsonNode opens = quote.path("open");
 
         List<PriceSeries.Bar> bars = new ArrayList<>();
         for (int i = 0; i < timestamps.size() && i < closes.size(); i++) {
@@ -37,7 +39,9 @@ public final class YahooChartParser {
             if (close == null || close.isNull() || close.asDouble() <= 0) {
                 continue;
             }
-            bars.add(new PriceSeries.Bar(Instant.ofEpochSecond(timestamps.get(i).asLong()), close.asDouble()));
+            JsonNode open = opens.get(i);
+            double o = open == null || open.isNull() || open.asDouble() <= 0 ? close.asDouble() : open.asDouble();
+            bars.add(new PriceSeries.Bar(Instant.ofEpochSecond(timestamps.get(i).asLong()), o, close.asDouble()));
         }
         return new PriceSeries(symbol, bars);
     }

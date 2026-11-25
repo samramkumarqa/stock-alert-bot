@@ -46,10 +46,26 @@ class PriceSeriesTest {
     }
 
     @Test
-    void emptyBeforeFirstBarCloses() {
-        PriceSeries s = new PriceSeries("X", List.of(bar("09:15", 10)));
+    void priceAtMarketOpenIsTheOpeningPrice() {
+        // NSE opens at 09:15 with the pre-open auction price; nothing has closed yet.
+        PriceSeries s = new PriceSeries("X", List.of(
+                new PriceSeries.Bar(at("09:15"), 98.0, 99.5), bar("09:16", 100)));
+
+        assertThat(s.priceAt(at("09:15"))).hasValue(98.0);   // open of the 09:15 bar
+        assertThat(s.priceAt(at("09:16"))).hasValue(99.5);   // close of the 09:15 bar
+    }
+
+    @Test
+    void emptyWhenNoBarStartsOrEndsNearT() {
+        PriceSeries s = new PriceSeries("LATE", List.of(bar("09:17", 10)));   // first trade only at 09:17
         assertThat(s.priceAt(at("09:15"))).isEmpty();
-        assertThat(s.priceAt(at("09:16"))).hasValue(10);
+    }
+
+    @Test
+    void closedBarWinsOverAnOpeningBarAtTheSameInstant() {
+        PriceSeries s = new PriceSeries("X", List.of(
+                new PriceSeries.Bar(at("09:29"), 101, 100), new PriceSeries.Bar(at("09:30"), 105, 106)));
+        assertThat(s.priceAt(at("09:30"))).hasValue(100);
     }
 
     @Test

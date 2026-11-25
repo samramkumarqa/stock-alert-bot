@@ -13,8 +13,8 @@ class AppConfigTest {
     void defaultsMatchTheStrategy() {
         AppConfig c = AppConfig.from(Map.of());
 
-        assertThat(c.baselineTime()).isEqualTo(LocalTime.of(9, 30));
-        assertThat(c.checkTime()).isEqualTo(LocalTime.of(9, 45));
+        assertThat(c.baselineTime()).isEqualTo(LocalTime.of(9, 15));
+        assertThat(c.checkTime()).isEqualTo(LocalTime.of(9, 30));
         assertThat(c.thresholdPct()).isEqualTo(1.5);
         assertThat(c.maxAlerts()).isEqualTo(5);
         assertThat(c.zone().getId()).isEqualTo("Asia/Kolkata");

@@ -88,6 +88,17 @@ class YfinanceSourceTest {
     }
 
     @Test
+    void parsesOpenAndCloseColumns() {
+        long t0915 = DAY.atTime(9, 15).atZone(IST).toEpochSecond();
+        Map<String, List<PriceSeries.Bar>> m = YfinanceSource.parseCsv(List.of(
+                "symbol,epoch,open,close", "SBIN," + t0915 + ",798.5,805.0"));
+
+        PriceSeries s = new PriceSeries("SBIN", m.get("SBIN"));
+        assertThat(s.priceAt(DAY.atTime(9, 15).atZone(IST).toInstant())).hasValue(798.5);
+        assertThat(s.priceAt(DAY.atTime(9, 16).atZone(IST).toInstant())).hasValue(805.0);
+    }
+
+    @Test
     void parsesCsvIgnoringHeaderAndBlankLines() {
         Map<String, List<PriceSeries.Bar>> m = YfinanceSource.parseCsv(List.of(
                 "symbol,epoch,close", "", "BAJAJ-AUTO,1761710340,9000.5", "BAJAJ-AUTO,1761710400,9010.25"));

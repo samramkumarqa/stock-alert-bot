@@ -50,8 +50,8 @@ public record AppConfig(
         Env e = new Env(env);
         return new AppConfig(
                 ZoneId.of(e.get("MARKET_TIMEZONE", "Asia/Kolkata")),
-                LocalTime.parse(e.get("BASELINE_TIME", "09:30")),
-                LocalTime.parse(e.get("CHECK_TIME", "09:45")),
+                LocalTime.parse(e.get("BASELINE_TIME", "09:15")),
+                LocalTime.parse(e.get("CHECK_TIME", "09:30")),
                 Double.parseDouble(e.get("THRESHOLD_PCT", "1.5")),
                 Integer.parseInt(e.get("MAX_ALERTS", "5")),
                 Duration.ofSeconds(Long.parseLong(e.get("FETCH_DELAY_SECONDS", "60"))),

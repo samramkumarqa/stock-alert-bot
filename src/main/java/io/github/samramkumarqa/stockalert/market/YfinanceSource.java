@@ -104,17 +104,16 @@ public final class YfinanceSource implements PriceSource {
             if (line.isBlank() || line.startsWith("symbol,")) {
                 continue;
             }
-            // Symbols never contain commas, so split from the right is safe.
-            int c2 = line.lastIndexOf(',');
-            int c1 = line.lastIndexOf(',', c2 - 1);
-            if (c1 <= 0 || c2 <= c1) {
+            // symbol,epoch,open,close (or the older symbol,epoch,close). Symbols never contain commas.
+            String[] f = line.split(",");
+            if (f.length < 3 || f[0].isBlank()) {
                 continue;
             }
-            String symbol = line.substring(0, c1);
-            long epoch = Long.parseLong(line.substring(c1 + 1, c2).strip());
-            double close = Double.parseDouble(line.substring(c2 + 1).strip());
-            map.computeIfAbsent(symbol, k -> new ArrayList<>())
-                    .add(new PriceSeries.Bar(Instant.ofEpochSecond(epoch), close));
+            Instant start = Instant.ofEpochSecond(Long.parseLong(f[1].strip()));
+            double close = Double.parseDouble(f[f.length - 1].strip());
+            double open = f.length >= 4 && !f[2].isBlank() ? Double.parseDouble(f[2].strip()) : close;
+            map.computeIfAbsent(f[0], k -> new ArrayList<>())
+                    .add(new PriceSeries.Bar(start, open > 0 ? open : close, close));
         }
         return map;
     }

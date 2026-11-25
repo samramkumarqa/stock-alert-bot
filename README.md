@@ -2,14 +2,14 @@
 
 [![CI](https://github.com/samramkumarqa/stock-alert-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/samramkumarqa/stock-alert-bot/actions/workflows/ci.yml)
 
-Every NSE trading morning, this bot finds the Nifty 500 stocks that rose more than 1.5% between 9:30 and 9:45 IST. It sends a **BUY alert for the top 5 gainers** to Telegram and email.
+Every NSE trading morning, this bot finds the Nifty 500 stocks that rose more than 1.5% in the first 15 minutes of trading, from the 9:15 open to 9:30 IST. It sends a **BUY alert for the top 5 gainers** to Telegram and email.
 
 It only sends alerts and never places orders. Treat it as a screener, not as investment advice.
 
 ```
 📈 BUY ALERT · Top 5 of 23 stocks · Thu 29 Oct 2026
 
-Top 5 gainers, each up more than 1.5% from 9:30 → 9:45 IST:
+Top 5 gainers, each up more than 1.5% from 9:15 → 9:30 IST:
 
 1. TATAMOTORS  +2.86%  ₹700.00 → ₹720.00
 2. M&M  +2.00%  ₹3,000.00 → ₹3,060.00
@@ -24,21 +24,21 @@ Checked 498 of 500 stocks.
 ## How it works
 
 ```
-cron-job.org → GitHub Actions (09:35 IST, Mon–Fri; GitHub schedule as backup)
-  └─ App waits until 09:46 IST
+cron-job.org → GitHub Actions (09:20 IST, Mon–Fri; GitHub schedule as backup)
+  └─ App waits until 09:31 IST
       ├─ Universe        Nifty 500 list from NSE (cached copy as fallback)
       ├─ YfinanceSource  runs scripts/fetch_bars.py once: 1-minute bars for all SYMBOL.NS (yfinance)
-      ├─ PriceSeries     price at 09:30 = close of the 09:29 bar; same for 09:45
-      ├─ MomentumRule    (P945 − P930) / P930 × 100  >  1.5, then top 5 by gain
+      ├─ PriceSeries     09:15 = opening price (open of the 09:15 bar); 09:30 = close of the 09:29 bar
+      ├─ MomentumRule    (P930 − P915) / P915 × 100  >  1.5, then top 5 by gain
       ├─ Notifiers       Telegram · Email (+ CSV) · console
       └─ CsvReport       reports/scan-YYYY-MM-DD.csv: every stock, marked above_threshold / buy_alert
 ```
 
 Design choices:
 
-- **Yahoo Finance data.** It's free, needs no login or token, and Yahoo lists NSE data as real-time. Because it returns the whole morning's 1-minute bars, a single fetch after 9:45 gives both prices.
+- **Yahoo Finance data.** It's free, needs no login or token, and Yahoo lists NSE data as real-time. Because it returns the whole morning's 1-minute bars, a single fetch after 9:30 gives both prices.
 - **One small Python step.** Yahoo blocks plain HTTP clients from cloud servers: from a GitHub runner, Java's HTTP client and even `curl` get HTTP 429 on every request. The [yfinance](https://github.com/ranaroussi/yfinance) library looks like a real browser and is accepted, so `scripts/fetch_bars.py` does the download and everything else stays in Java. The pure-Java client is still there (`PRICE_SOURCE=yahoo-http`) for networks where Yahoo allows it.
-- **Exact prices, and an on-time trigger.** The 9:30 and 9:45 prices come from the 1-minute bars, not from "now". An external scheduler starts the job, because GitHub's own scheduler can run hours late, and a run that starts too late sends a warning instead of a stale buy list.
+- **Exact prices, and an on-time trigger.** The 9:15 and 9:30 prices come from the 1-minute bars, not from "now". An external scheduler starts the job, because GitHub's own scheduler can run hours late, and a run that starts too late sends a warning instead of a stale buy list.
 - **Telegram for alerts.** It's free and gives an instant push notification, with no SMS registration or per-message fees.
 - **Secrets only in env vars and GitHub Secrets**, never in code.
 - **Market calendar.** Weekends and NSE holidays (`src/main/resources/nse-holidays.txt`) are skipped.
@@ -67,7 +67,7 @@ Design choices:
 
 ## On-time trigger (cron-job.org)
 
-GitHub's built-in scheduler is "best effort". On 2 Nov 2026, the 09:05 schedule only started at **17:07**. To get the alert at 9:46, a free external scheduler starts the workflow instead, and it fires on the minute.
+GitHub's built-in scheduler is "best effort". On 2 Nov 2026, the 09:05 schedule only started at **17:07**. To get the alert at 9:31, a free external scheduler starts the workflow instead, and it fires on the minute.
 
 1. **Create a GitHub token** that can only start this workflow: GitHub → your avatar → Settings → Developer settings → **Fine-grained tokens** → *Generate new token*.
    - Repository access: *Only select repositories* → `stock-alert-bot`
@@ -75,7 +75,7 @@ GitHub's built-in scheduler is "best effort". On 2 Nov 2026, the 09:05 schedule 
    - Expiration: 1 year. Set yourself a reminder to renew it.
 2. **Create a free account at [cron-job.org](https://cron-job.org)** → *Create cronjob*:
    - URL: `https://api.github.com/repos/samramkumarqa/stock-alert-bot/actions/workflows/morning-scan.yml/dispatches`
-   - Schedule: custom, **09:35**, Monday–Friday, time zone **Asia/Kolkata**
+   - Schedule: custom, **09:20**, Monday–Friday, time zone **Asia/Kolkata**
    - *Advanced* tab: request method **POST**; headers `Authorization: Bearer <your token>`, `Accept: application/vnd.github+json`, `Content-Type: application/json`; request body `{"ref":"main"}`
    - Turn on "notify me on failure".
 3. Click **Test run**. GitHub replies `204` and a new run appears under Actions. On a weekend it just logs "not an NSE trading day".
@@ -84,10 +84,10 @@ How the two triggers work together:
 
 | | |
 |---|---|
-| cron-job.org, 09:35 | Primary. The run waits until 09:46, scans, and sends the alert. |
+| cron-job.org, 09:20 | Primary. The run waits until 09:31, scans, and sends the alert. |
 | GitHub schedule, 09:05 | Backup, in case cron-job.org misses a day. |
 | Same-day duplicate | The first run that sends saves an `alert-sent-<date>` marker, and later runs that day stop at once. |
-| Run starts after 10:16 (`MAX_LATE_MINUTES`=30) | No stale buy list. You get "⚠ Morning scan started late" instead, so you know the trigger failed. |
+| Run starts after 10:01 (`MAX_LATE_MINUTES`=30) | No stale buy list. You get "⚠ Morning scan started late" instead, so you know the trigger failed. |
 
 After that, it runs by itself every weekday.
 
@@ -103,7 +103,7 @@ set -a; source .env; set +a
 
 java -jar target/stock-alert-bot.jar backtest 2026-10-29            # console only
 java -jar target/stock-alert-bot.jar backtest 2026-10-29 --notify   # also Telegram/email
-java -jar target/stock-alert-bot.jar                                # live: waits for 09:46 IST
+java -jar target/stock-alert-bot.jar                                # live: waits for 09:31 IST
 ```
 
 Run these from the repo root, so the bot finds `scripts/fetch_bars.py`.
@@ -123,7 +123,7 @@ docker run --rm --env-file .env -v "$PWD/reports:/app/reports" stock-alert-bot b
 |---|---|---|
 | `THRESHOLD_PCT` | `1.5` | A stock qualifies when its gain is **more than** this |
 | `MAX_ALERTS` | `5` | Alert only the top N gainers among qualifying stocks (`0` = all) |
-| `BASELINE_TIME` / `CHECK_TIME` | `09:30` / `09:45` | The window (IST) |
+| `BASELINE_TIME` / `CHECK_TIME` | `09:15` / `09:30` | The window (IST). At 09:15 the opening price is used |
 | `FETCH_DELAY_SECONDS` | `60` | Wait after `CHECK_TIME` so the last bar has closed |
 | `PRICE_SOURCE` | `yfinance` | `yfinance` (Python fetcher), or `yahoo-http` (pure Java; blocked from cloud servers) |
 | `PYTHON` / `FETCH_SCRIPT` | `python3` / `scripts/fetch_bars.py` | How the bot runs the fetcher |
@@ -138,7 +138,7 @@ docker run --rm --env-file .env -v "$PWD/reports:/app/reports" stock-alert-bot b
 
 ```
 rule/MomentumRuleTest          threshold boundaries (1.49 / 1.50 / 1.51 %), sorting, top-N, bad prices
-market/PriceSeriesTest         which bar is "the price at 09:30", stale/illiquid stocks
+market/PriceSeriesTest         which bar is "the price at 09:30", the 09:15 opening price, stale/illiquid stocks
 market/YfinanceSourceTest      Java ↔ Python bridge with a fake fetcher: CSV hand-off, failures, missing script
 market/YahooFinanceSourceTest  pure-Java client: response fixture, URL encoding (M&M), 429 retry, 5xx give-up, 404
 market/UniverseTest            NSE CSV parsing, download → cache → fallback
