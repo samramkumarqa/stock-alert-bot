@@ -1,0 +1,58 @@
+name: Rule comparison (backtest)
+
+on:
+  push:
+    branches: [rule-comparison]
+    paths: [analysis/compare_rules.py, .github/workflows/rule-comparison.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: pip install -q -r scripts/requirements.txt pytest
+
+      - name: Unit tests
+        run: cd analysis && python -m pytest -q
+
+      - name: Restore cached Nifty 500 list
+        uses: actions/cache/restore@v4
+        with:
+          path: data/nifty500.csv
+          key: nifty500-none
+          restore-keys: nifty500-
+
+      - name: Nifty 500 list
+        run: |
+          if [ ! -s data/nifty500.csv ]; then
+            mkdir -p data
+            curl -sSfL -A 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130.0 Safari/537.36' \
+              -o data/nifty500.csv https://archives.nseindia.com/content/indices/ind_nifty500list.csv
+          fi
+          wc -l data/nifty500.csv
+
+      - name: Fetch 1-minute bars (last ~30 days)
+        run: python analysis/compare_rules.py fetch --universe data/nifty500.csv --out analysis/out
+
+      - name: Report
+        run: |
+          python analysis/compare_rules.py report --features analysis/out/features.csv --out analysis/out
+          cat analysis/out/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit results to this branch
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -f analysis/out/summary.md analysis/out/summary.csv analysis/out/picks.csv analysis/out/features.csv
+          git commit -m "Rule comparison results $(TZ=Asia/Kolkata date +%F)" && git push
