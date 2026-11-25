@@ -47,7 +47,7 @@ STALE = dt.timedelta(minutes=5)
 
 T = {k: dt.time(*map(int, v.split(":"))) for k, v in {
     "open": "09:15", "t930": "09:30", "t945": "09:45", "brk_end": "10:00",
-    "t1030": "10:30", "t1515": "15:15"}.items()}
+    "t1000": "10:00", "t1015": "10:15", "t1030": "10:30", "t1515": "15:15"}.items()}
 
 
 # ---------------------------------------------------------------- prices ----
@@ -70,7 +70,7 @@ def day_features(sym: str, day: dt.date, bars: pd.DataFrame) -> dict:
     bars = bars.dropna(subset=["Close"])
     bars = bars[bars["Close"] > 0]
     f = {"date": day.isoformat(), "symbol": sym}
-    for name in ("open", "t930", "t945", "t1030", "t1515"):
+    for name in ("open", "t930", "t945", "t1000", "t1015", "t1030", "t1515"):
         f["p_" + name] = price_at(bars, at(name))
 
     # Opening range: highs of the 09:15..09:29 bars.
