@@ -73,6 +73,12 @@ def day_features(sym: str, day: dt.date, bars: pd.DataFrame) -> dict:
     for name in ("open", "t930", "t945", "t1000", "t1015", "t1030", "t1515"):
         f["p_" + name] = price_at(bars, at(name))
 
+    # Every 5 minutes from 09:50 to 15:20, for exit-time studies.
+    t5 = at("t945")
+    while t5 < dt.datetime.combine(day, dt.time(15, 20), IST):
+        t5 += dt.timedelta(minutes=5)
+        f["p5_" + t5.strftime("%H%M")] = price_at(bars, t5)
+
     # Opening range: highs of the 09:15..09:29 bars.
     rng = bars[(bars.index >= at("open")) & (bars.index < at("t930"))]
     orh = float(rng["High"].max()) if not rng.empty else math.nan
